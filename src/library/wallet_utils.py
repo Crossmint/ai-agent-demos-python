@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime
+import os
 
 def create_wallet(api_key: str, wallet_type: str, signer_address: str):
     """
@@ -13,7 +14,8 @@ def create_wallet(api_key: str, wallet_type: str, signer_address: str):
             "timestamp": datetime.utcnow().isoformat()
         }
 
-    endpoint = "{hostname_here}/api/2024-06-09/wallets"
+    # Hit the Crossmint Staging API
+    endpoint = f"https://staging.crossmint.com/api/v1-alpha2/wallets"
     
     payload = {
         "type": wallet_type,
@@ -36,14 +38,25 @@ def create_wallet(api_key: str, wallet_type: str, signer_address: str):
             json=payload,
             headers=headers
         )
-        response.raise_for_status()
-        
+
+        if not response.ok:
+            error_message = "Unknown error"
+            try:
+                error_data = response.json()
+                error_message = error_data.get('message', str(response.text))
+            except:
+                error_message = str(response.text)
+                
+            return {
+                "status": "error",
+                "error": f"API Error: {error_message}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+                
         return {
             "status": "success",
-            "wallet_data": response.json(),
-            "wallet_type": wallet_type,
             "timestamp": datetime.utcnow().isoformat(),
-            "signer_address": signer_address
+            "wallet_data": response.json(),
         }
         
     except requests.exceptions.RequestException as e:
