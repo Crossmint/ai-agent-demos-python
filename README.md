@@ -1,6 +1,8 @@
 # ai-agent-demos-python
 
-## cli-hello-world Setup Instructions
+## Setup Instructions
+
+### src/cli-hello-world
 
 1. Set up your API keys in `.env`:
 
