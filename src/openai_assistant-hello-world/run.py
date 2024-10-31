@@ -33,9 +33,7 @@ class AssistanceAgent:
         self.wallets = []
         self.api_calls = 0
         self.max_api_calls = 20
-        
-        self.gpt_assistant_id = "asst_yETDJhHtKWr40FmRwyiG4Z9y"
-        
+
         self.client = OpenAI()
 
     def create_new_wallet(self, wallet_type):
