@@ -2,9 +2,9 @@
 
 ## Demo Agents
 
-### [src > CLI Agent](src/cli_hello-world)
+### src > [CLI Agent](src/cli_hello-world)
 
-### [src > OpenAI Assistant Agent](src/openai_assistant-hello-world)
+### src > [OpenAI Assistant Agent](src/openai_assistant-hello-world)
 
 ## Documentation
 
