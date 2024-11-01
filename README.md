@@ -1,6 +1,4 @@
-## AI Agent Toolkit
-
-## Demo Agents
+## 🤖 Demo Agents 
 
 ### src > [CLI Agent](src/cli_hello-world)
 
