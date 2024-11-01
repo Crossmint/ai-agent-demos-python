@@ -1,6 +1,6 @@
 ## Setup Instructions
 
-### src/cli_hello-world
+### src/cli-hello-world
 
 1. Set up your API keys in `.env`:
 
@@ -27,11 +27,11 @@
 4. Install required Python packages:
 
    ```bash
-   cd src/cli_hello-world
+   cd src/cli-hello-world
    pip3|pip install -r requirements.txt
    ```
 
-5. From the `src/cli_hello-world` directory, run the primary agent:
+5. From the `src/cli-hello-world` directory, run the primary agent:
    ```bash
    python3 run.py
    ```
