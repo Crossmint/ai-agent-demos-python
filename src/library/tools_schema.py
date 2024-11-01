@@ -45,7 +45,7 @@ def tools_schema():
                     "properties": {
                         "wallet_address": {
                             "type": "string",
-                            "description": "The address of the wallet to deposit to"
+                            "description": "The address of the wallet to deposit to (you will be prompted to select the destination wallet if not specified)"
                         },
                         "amount": {
                             "type": "number",

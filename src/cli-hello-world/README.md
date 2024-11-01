@@ -35,3 +35,12 @@
    ```bash
    python3 run.py
    ```
+
+There are 2 flows available:
+
+1. `automate.py` - Automates the entire wallet flow, from creating the wallet to submitting the signature and fetching the transaction.
+2. a) `1_create_wallet.py` - Creates the wallet.
+3. b) `2_create_transaction.py` - Creates the transaction.
+4. c) `3_generate_signature.py` - Generates the signature.
+5. d) `4_submit_signature.py` - Submits the signature.
+6. e) `5_get_transaction.py` - Fetches the transaction.
