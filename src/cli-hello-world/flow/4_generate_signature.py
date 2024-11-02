@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-user_op_hash = "TODO:user_op_hash_here" 
+user_op_hash = "your_user_op_hash_here" 
 
 def generate_evm_smart_wallet_signature():
     private_key = os.getenv('SIGNER_PRIVATE_KEY')

@@ -11,13 +11,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 def submit_evm_smart_wallet_signature():
     api_key = os.getenv('CROSSMINT_SERVER_API_KEY')
-    user_op_sender = "TODO:user_op_sender_address_here"
-    transaction_id = "TODO:transaction_id_here"
-    signer_id = "evm-keypair-TODO:signer_id_here"
-    signature = "TODO:signature_here" # Signature generated from generate_signature.py
+    user_op_sender = "0x0364531237597B8694F3E63C2f8Db19f00BfBED1"
+    transaction_id = "66a8e7a1-cfc3-4063-a9fb-216bbcf92bfc"
+    signer_id = "evm-keypair-0x94A4491f467bc21d7F280B1a3451CD1672F79088"
+    signature = "0x27a517e00b90010ac2708fcfd6bc7d22657d924bcaaa36a6ca85bd661b8a21b2175dbca2788af96f41797939470df1de05d4ee0d4200d009c8b1f59aa51275271b" # Signature generated from generate_signature.py
 
     return submit_transaction_signature(api_key, user_op_sender, transaction_id, signer_id, signature)
 

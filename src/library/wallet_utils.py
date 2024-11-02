@@ -2,7 +2,8 @@ import requests
 import os
 from datetime import datetime
 from web3 import Web3
-
+from eth_abi import encode
+from eth_utils import function_signature_to_4byte_selector
 from eth_account.messages import encode_defunct
 
 def create_wallet(api_key: str, wallet_type: str, signer_address: str):
@@ -60,6 +61,113 @@ def create_wallet(api_key: str, wallet_type: str, signer_address: str):
             "status": "success",
             "timestamp": datetime.utcnow().isoformat(),
             "wallet_data": response.json(),
+        }
+        
+    except requests.exceptions.RequestException as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+def get_usdc_from_faucet(chain: str, wallet_address: str, amount: int):
+    """
+    Get USDC from the Crossmint faucet
+    """
+    endpoint = f"https://staging.crossmint.com/api/2022-06-09/faucet/usdc"
+
+    payload = {
+        "walletAddress": wallet_address,
+        "chain": chain,
+        "amount": amount
+    }
+
+    try:
+        response = requests.post(endpoint, json=payload)
+
+        if not response.ok:
+            return {
+                "status": "error",
+                "error": f"API Error: {response.text}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "transaction_data": response.json()
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+def transfer_usdc(api_key: str, from_wallet_address: str, to_wallet_address: str, amount: int, chain: str = "base-sepolia"):
+    """
+    Transfer USDC from one wallet to another
+    
+    Args:
+        api_key (str): Crossmint API key
+        from_wallet_address (str): Source wallet address
+        to_wallet_address (str): Destination wallet address
+        amount (int): Amount in USDC base units (1000000 = 1 USDC)
+        chain (str): Blockchain network (default: "base-sepolia")
+    """
+    usdc_contract_address = "0x14196F08a4Fa0B66B7331bC40dd6bCd8A1dEeA9F"
+    
+    # Make sure to_wallet_address is checksummed    
+    to_wallet_address = Web3.to_checksum_address(to_wallet_address)
+    
+    # Encode the transfer function call
+    transfer_selector = function_signature_to_4byte_selector('transfer(address,uint256)')
+    encoded_params = encode(['address', 'uint256'], [to_wallet_address, amount])
+    encoded_transfer = transfer_selector + encoded_params
+
+    endpoint = f"https://staging.crossmint.com/api/v1-alpha2/wallets/{from_wallet_address}/transactions/{chain}"
+
+    payload = {
+        "params": {
+            "calls": [{
+                "to": usdc_contract_address,
+                "value": "0",
+                "data": f"0x{encoded_transfer.hex()}"
+            }]
+        }
+    }
+
+    headers = {
+        "x-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(
+            endpoint,
+            json=payload,
+            headers=headers
+        )
+
+        if not response.ok:
+            error_message = "Unknown error"
+            try:
+                error_data = response.json()
+                error_message = error_data.get('message', str(response.text))
+            except:
+                error_message = str(response.text)
+                
+            return {
+                "status": "error",
+                "error": f"API Error: {error_message}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+        return {
+            "status": "success",
+            "timestamp": datetime.utcnow().isoformat(),
+            "transaction_data": response.json()
         }
         
     except requests.exceptions.RequestException as e:
@@ -144,7 +252,8 @@ def generate_signature(private_key: str, user_op_hash: str) -> str:
     eth_message = encode_defunct(primitive=message_bytes)
     signed_message = account.sign_message(eth_message)
     
-    return signed_message.signature.hex()
+    # Add '0x' prefix to the signature
+    return '0x' + signed_message.signature.hex()
 
 
 def submit_transaction_signature(
@@ -290,9 +399,12 @@ def get_wallet_balance(api_key: str, chain:str, wallet_address: str):
             }
 
         response_json = response.json()
-        # Get token balance in hex format and convert to decimal
-        balance = response_json[0]['tokenBalance']
-        human_readable_balance = int(balance, 16) / 10**18
+        # Find USDC token balance from response array
+        usdc_token = next((token for token in response_json if token.get("tokenMetadata", {}).get("symbol") == "USDC"), None)
+        balance = "0x0"
+        if usdc_token:
+            balance = usdc_token.get("tokenBalance", "0x0")
+        human_readable_balance = int(balance, 16) / 10**6
 
         return {
             "status": "success",
@@ -300,132 +412,6 @@ def get_wallet_balance(api_key: str, chain:str, wallet_address: str):
             "balance": human_readable_balance,
         }
 
-    except requests.exceptions.RequestException as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-def deposit_tokens(api_key: str, treasury_wallet: str, destination_wallet: str, amount: float):
-    """
-    Deposit tokens from treasury wallet to a user wallet
-    
-    Args:
-        api_key (str): Crossmint API key
-        treasury_wallet (str): Wallet address to send tokens from (must be funded beforehand)
-        destination_wallet (str): Wallet address to receive tokens
-        amount (float): Amount in ETH to transfer
-    """
-
-    # TODO: Make this dynamic
-    CHAIN = "ethereum-sepolia"
-    
-    # Convert amount to wei (multiply by 10**18)
-    amount_in_wei = hex(int(amount * 10**18))
-    
-    endpoint = f"https://staging.crossmint.com/api/v1-alpha2/wallets/{treasury_wallet}/transactions/{CHAIN}"
-    
-    payload = {
-        "to": destination_wallet,
-        "value": amount_in_wei,
-        "data": "0x"
-    }
-    
-    headers = {
-        "x-api-key": api_key,
-        "Content-Type": "application/json"
-    }
-    
-    try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            headers=headers
-        )
-        
-        if not response.ok:
-            error_message = "Unknown error"
-            try:
-                error_data = response.json()
-                error_message = error_data.get('message', str(response.text))
-            except:
-                error_message = str(response.text)
-                
-            return {
-                "status": "error",
-                "error": f"API Error: {error_message}",
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        
-        return {
-            "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "transaction_data": response.json()
-        }
-        
-    except requests.exceptions.RequestException as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-def transfer_tokens(api_key: str, from_wallet: str, to_wallet: str, amount: float):
-    """
-    Transfer tokens from one wallet to another
-    
-    Args:
-        api_key (str): Crossmint API key
-        from_wallet (str): Source wallet address
-        to_wallet (str): Destination wallet address
-        amount (float): Amount in ETH to transfer
-    """
-    CHAIN = "ethereum-sepolia"
-    
-    # Convert amount to wei (multiply by 10**18)
-    amount_in_wei = hex(int(amount * 10**18))
-    
-    endpoint = f"https://staging.crossmint.com/api/v1-alpha2/wallets/{from_wallet}/transactions/{CHAIN}"
-    
-    payload = {
-        "to": to_wallet,
-        "value": amount_in_wei,
-        "data": "0x"
-    }
-    
-    headers = {
-        "x-api-key": api_key,
-        "Content-Type": "application/json"
-    }
-    
-    try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            headers=headers
-        )
-        
-        if not response.ok:
-            error_message = "Unknown error"
-            try:
-                error_data = response.json()
-                error_message = error_data.get('message', str(response.text))
-            except:
-                error_message = str(response.text)
-                
-            return {
-                "status": "error",
-                "error": f"API Error: {error_message}",
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        
-        return {
-            "status": "success",
-            "timestamp": datetime.utcnow().isoformat(),
-            "transaction_data": response.json()
-        }
-        
     except requests.exceptions.RequestException as e:
         return {
             "status": "error",

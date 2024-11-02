@@ -2,3 +2,5 @@ requests==2.32.3
 python-dotenv==1.0.1
 openai==1.53.0
 web3==7.4.0
+eth-abi==5.1.0
+eth-utils==5.1.0

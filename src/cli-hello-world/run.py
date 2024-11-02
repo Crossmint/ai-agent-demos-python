@@ -6,12 +6,17 @@ from pathlib import Path
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
-from library.wallet_utils import create_wallet, get_wallet_balance, deposit_tokens, transfer_tokens
+from library.wallet_utils import (
+    create_wallet,
+    create_transaction, generate_signature, submit_transaction_signature,
+    get_transaction, transfer_usdc, get_usdc_from_faucet
+)
 from library.tools_schema import tools_schema
 from dotenv import load_dotenv
 from openai import OpenAI
 import os
 import json
+import time
 
 # Load environment variables
 load_dotenv()
@@ -22,12 +27,21 @@ class CryptoAIAgent:
         if not self.api_key:
             raise ValueError("No API key found in .env file")
         
+        self.private_key = os.getenv('SIGNER_PRIVATE_KEY')
+        if not self.private_key:
+            raise ValueError("No signer private key found in .env file")
+
         self.signer_address = os.getenv('SIGNER_ADDRESS')
         if not self.signer_address:
             raise ValueError("No signer address found in .env file, be sure to run 'python generate_keys.py' inside '/src/library' to generate a new set of keys")
         
         self.evm_treasury_wallet = os.getenv('TEST_TREASURY_EVM_WALLET')
-
+        
+        self.chain_explorers = {
+            "base-sepolia": "https://sepolia.basescan.org",
+            "ethereum-sepolia": "https://sepolia.etherscan.io",
+            "solana-devnet": "https://explorer.solana.com/?cluster=devnet"
+        }
         self.chat_history = []
         self.openai_client = OpenAI()  # Assumes OPENAI_API_KEY in env
         self.wallets = []
@@ -41,32 +55,6 @@ class CryptoAIAgent:
         if result.get("status") == "success":
             self.wallets.append(result["wallet_data"])
             
-        return result
-    
-    def get_wallet_balance(self, wallet_address):
-        """Agent method to get the balance of a wallet"""
-        # Find the wallet in our tracked wallets
-        wallet = next((w for w in self.wallets if w['address'] == wallet_address), None)
-        if not wallet:
-            return {"status": "error", "message": "Wallet not found in tracked wallets"}
-            
-        # Infer chain from wallet type
-        chain = "ethereum-sepolia" if wallet['type'] == "evm-smart-wallet" else "solana-devnet"
-        
-        result = get_wallet_balance(self.api_key, chain, wallet_address)
-        return result
-            
-    def deposit_tokens(self, wallet_address, amount):
-        """Agent method to deposit tokens to a wallet from a treasury wallet (specified in .env)"""
-        if not self.evm_treasury_wallet:
-            raise ValueError("No treasury wallet found in .env file")
-        
-        result = deposit_tokens(self.api_key, self.evm_treasury_wallet, wallet_address, amount)
-        return result
-    
-    def transfer_tokens_to_wallet(self, chain, wallet_address, amount):
-        """Agent method to transfer tokens from one wallet to another"""
-        result = transfer_tokens(self.api_key, chain, wallet_address, amount)
         return result
 
     def select_wallet(self):
@@ -88,18 +76,156 @@ class CryptoAIAgent:
             except ValueError:
                 print("Please enter a valid number.")
 
-    def transfer_tokens_to_wallet(self, chain, amount):
-        """Modified to prompt for destination wallet"""
-        destination_address = self.select_wallet()
-        if not destination_address:
-            return {"status": "error", "message": "No destination wallet selected"}
+    def create_transaction(self, wallet_address):
+        """Create and process a transaction for the specified wallet"""
+        try:
+            # Step 1: Create transaction
+            print("\nCreating transaction...")
+            transaction_response = create_transaction(self.api_key, wallet_address, "base-sepolia")
+            
+            if transaction_response.get("status") != "success":
+                return {"status": "error", "message": "Transaction creation failed"}
+                
+            transaction_data = transaction_response.get("transaction_data", {})
+            transaction_id = transaction_data.get("id")
+            user_op_hash = transaction_data.get("data", {}).get("userOperationHash")
+            
+            # Step 2: Generate signature
+            print("Generating signature...")
+            signature = generate_signature(self.private_key, user_op_hash)
+            
+            # Step 3: Submit signature
+            print("Submitting signature...")
+            signer_id = f"evm-keypair-{self.signer_address}"
+            submit_response = submit_transaction_signature(
+                self.api_key, 
+                wallet_address, 
+                transaction_id, 
+                signer_id, 
+                signature
+            )
+            
+            if submit_response.get("status") != "success":
+                return {"status": "error", "message": "Signature submission failed"}
+                
+            # Step 4: Verify transaction
+            print("Verifying transaction...")
+            time.sleep(10)  # Allow transaction to process
+            
+            transaction_status = get_transaction(self.api_key, wallet_address, transaction_id)
+            
+            return {
+                "status": "success",
+                "message": "Transaction completed successfully",
+                "data": {
+                    "transaction_id": transaction_id,
+                    "final_status": transaction_status
+                }
+            }
+            
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
         
-        result = transfer_tokens(self.api_key, chain, destination_address, amount)
+    def get_explorer_url(self, wallet_address: str, chain: str = "base-sepolia") -> str:
+        """Generate blockchain explorer URL for the wallet"""
+        base_url = self.chain_explorers.get(chain)
+        if not base_url:
+            return "Unknown chain explorer"
+        
+        if "solana" in chain:
+            return f"{base_url}/address/{wallet_address}"
+        else:
+            return f"{base_url}/address/{wallet_address}#tokentxns"
+
+    def get_wallet_balance(self, wallet_address):
+        """Agent method to get the balance of a wallet"""
+        wallet = next((w for w in self.wallets if w['address'] == wallet_address), None)
+        if not wallet:
+            return {"status": "error", "message": "Wallet not found in tracked wallets"}
+            
+        chain = "base-sepolia" if wallet['type'] == "evm-smart-wallet" else "solana-devnet"
+        explorer_url = self.get_explorer_url(wallet_address, chain)
+        
+        return {
+            "status": "success",
+            "message": f"View wallet balance and transactions at: {explorer_url}",
+            "explorer_url": explorer_url
+        }
+
+    def get_usdc_tokens(self, wallet_address: str, amount: int):
+        """Get USDC tokens from faucet for a wallet"""
+        result = get_usdc_from_faucet("base-sepolia", wallet_address, amount)
+        
+        if result.get("status") == "success":
+            print(f"Waiting for faucet transaction to process...")
+            time.sleep(5)
+            
+            # Provide explorer link instead of balance
+            explorer_url = self.get_explorer_url(wallet_address)
+            print(f"\nView your USDC balance and transactions at: {explorer_url}")
+        
         return result
-    
-    def get_wallet_count(self):
-        """Track number of wallets created"""
-        return len(self.wallets)
+
+    def transfer_usdc_tokens(self, from_wallet: str, to_wallet: str, amount: int):
+        """Transfer USDC tokens between wallets"""
+        # Convert USDC amount to base units (1 USDC = 1,000,000 base units)
+        amount_in_base_units = amount * 1000000
+
+        # Create and send the transaction
+        transaction_response = transfer_usdc(
+            self.api_key,
+            from_wallet,
+            to_wallet,
+            amount_in_base_units,
+            "base-sepolia"
+        )
+        
+        if transaction_response.get("status") != "success":
+            return transaction_response
+
+        transaction_data = transaction_response.get("transaction_data", {})
+        transaction_id = transaction_data.get("id")
+        user_op_hash = transaction_data.get("data", {}).get("userOperationHash")
+
+        # Generate and submit signature
+        signature = generate_signature(self.private_key, user_op_hash)
+        signer_id = f"evm-keypair-{self.signer_address}"
+        
+        submit_response = submit_transaction_signature(
+            self.api_key,
+            from_wallet,
+            transaction_id,
+            signer_id,
+            signature
+        )
+
+        if submit_response.get("status") != "success":
+            return submit_response
+
+        # Wait for transaction to process
+        print("Waiting for transaction to process...")
+        time.sleep(10)
+
+        # Get final transaction status
+        transaction_status = get_transaction(self.api_key, from_wallet, transaction_id)
+        
+        if transaction_status.get("status") == "success":
+            # Add explorer links for both wallets
+            from_explorer = self.get_explorer_url(from_wallet)
+            to_explorer = self.get_explorer_url(to_wallet)
+            
+            return {
+                "status": "success",
+                "message": "USDC transfer completed",
+                "data": {
+                    "transaction_id": transaction_id,
+                    "final_status": transaction_status,
+                    "from_wallet_explorer": from_explorer,
+                    "to_wallet_explorer": to_explorer
+                }
+            }
+        else:
+            return transaction_status
 
     def chat_completion(self, user_input):
         """Handle chat completion with OpenAI"""
@@ -170,25 +296,48 @@ def main():
                         print(f"Result: {json.dumps(result, indent=2)}")
 
                     elif tool_call.function.name == "get_wallet_balance":
-                        args = json.loads(tool_call.function.arguments)  # Parse JSON string into dict
-                        result = agent.get_wallet_balance(args["wallet_address"])
-                        print(f"\nWallet Balance: {result.get('balance', 'Unknown')}")
-
-                    elif tool_call.function.name == "deposit_tokens":
-                        args = json.loads(tool_call.function.arguments)  # Parse JSON string into dict
-                        result = agent.deposit_tokens(args["wallet_address"], args["amount"])
-                        if result.get("status") == "success":
-                            print(f"\nTokens Deposited Successfully!")
-                        else:
-                            print(f"\nDeposit Failed: {result.get('error', 'Unknown error')}")
-
-                    elif tool_call.function.name == "transfer_tokens_to_wallet":
                         args = json.loads(tool_call.function.arguments)
-                        result = agent.transfer_tokens_to_wallet(args["chain"], args["amount"])
+                        result = agent.get_wallet_balance(args["wallet_address"])
                         if result.get("status") == "success":
-                            print(f"\nTokens Transferred Successfully!")
+                            print(f"\n{result.get('message')}")
                         else:
-                            print(f"\nTransfer Failed: {result.get('error', 'Unknown error')}")
+                            print(f"\nError: {result.get('message')}")
+
+                    elif tool_call.function.name == "create_transaction":
+                        args = json.loads(tool_call.function.arguments)
+                        wallet_address = agent.select_wallet()  # Let user select the wallet
+                        if wallet_address:
+                            result = agent.create_transaction(wallet_address)
+                            if result.get("status") == "success":
+                                print("\nTransaction Completed Successfully!")
+                            else:
+                                print(f"\nTransaction Failed: {result.get('message', 'Unknown error')}")
+                            print(f"Result: {json.dumps(result, indent=2)}")
+                        else:
+                            print("\nNo wallet selected for transaction.")
+
+                    elif tool_call.function.name == "get_usdc_from_faucet":
+                        args = json.loads(tool_call.function.arguments)
+                        result = agent.get_usdc_tokens(args["wallet_address"], args["amount"])
+                        if result.get("status") == "success":
+                            print("\nUSDC tokens requested successfully!")
+                        else:
+                            print(f"\nFailed to get USDC tokens: {result.get('message', 'Unknown error')}")
+
+                    elif tool_call.function.name == "transfer_usdc":
+                        args = json.loads(tool_call.function.arguments)
+                        result = agent.transfer_usdc_tokens(
+                            args["from_wallet_address"],
+                            args["to_wallet_address"],
+                            args["amount"]
+                        )
+                        if result.get("status") == "success":
+                            print("\nUSDC transfer completed successfully!")
+                            print(f"\nView source wallet at: {result['data']['from_wallet_explorer']}")
+                            print(f"View destination wallet at: {result['data']['to_wallet_explorer']}")
+                        else:
+                            print(f"\nUSDC transfer failed: {result.get('message', 'Unknown error')}")
+                        print(f"Result: {json.dumps(result, indent=2)}")
 
     except Exception as e:
         print(f"An unexpected error occurred: {e}")

@@ -38,18 +38,30 @@ def tools_schema():
         {
             "type": "function",
             "function": {
-                "name": "deposit_tokens",
-                "description": "Deposit tokens from treasury to a wallet",
+                "name": "create_transaction",
+                "description": "Create and submit a new transaction for a selected wallet",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},  # No parameters needed as wallet selection is handled internally
+                    "required": []
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "get_usdc_from_faucet",
+                "description": "Get USDC tokens from the faucet for a specified wallet",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "wallet_address": {
                             "type": "string",
-                            "description": "The address of the wallet to deposit to (you will be prompted to select the destination wallet if not specified)"
+                            "description": "The address of the wallet to receive USDC"
                         },
                         "amount": {
-                            "type": "number",
-                            "description": "Amount of tokens to deposit"
+                            "type": "integer",
+                            "description": "Amount of USDC to request (in whole units)"
                         }
                     },
                     "required": ["wallet_address", "amount"]
@@ -59,22 +71,25 @@ def tools_schema():
         {
             "type": "function",
             "function": {
-                "name": "transfer_tokens_to_wallet",
-                "description": "Transfer tokens between wallets (you will be prompted to select the destination wallet)",
+                "name": "transfer_usdc",
+                "description": "Transfer USDC from one wallet to another",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "chain": {
+                        "from_wallet_address": {
                             "type": "string",
-                            "enum": ["ethereum-sepolia", "solana-devnet"],
-                            "description": "The chain to transfer on (for now only sepolia and devnet are supported)"
+                            "description": "The source wallet address"
+                        },
+                        "to_wallet_address": {
+                            "type": "string",
+                            "description": "The destination wallet address"
                         },
                         "amount": {
-                            "type": "number",
-                            "description": "Amount of tokens to transfer"
+                            "type": "integer",
+                            "description": "Amount of USDC to transfer (in whole units)"
                         }
                     },
-                    "required": ["chain", "amount"]
+                    "required": ["from_wallet_address", "to_wallet_address", "amount"]
                 }
             }
         }
