@@ -12,11 +12,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Update with your wallet address
-test_wallet_address = "TODO:wallet_address_here" 
+test_wallet_address = "TODO:wallet_address_here"
+
 
 def create_evm_smart_wallet_transaction():
     api_key = os.getenv('CROSSMINT_SERVER_API_KEY')
     return create_transaction(api_key, test_wallet_address, "base-sepolia")
+
 
 if __name__ == "__main__":
     response = create_evm_smart_wallet_transaction()
@@ -25,5 +27,5 @@ if __name__ == "__main__":
         print(f"\nTransaction Created Successfully!")
     else:
         print(f"\nTransaction Creation Failed!")
-        
+
     print(f"Result: {json.dumps(response, indent=2)}")
