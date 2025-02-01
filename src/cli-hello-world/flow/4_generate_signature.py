@@ -10,13 +10,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-user_op_hash = "your_user_op_hash_here" 
+user_op_hash = "your_user_op_hash_here"
+
 
 def generate_evm_smart_wallet_signature():
-    private_key = os.getenv('SIGNER_PRIVATE_KEY')
-    return generate_signature(private_key, user_op_hash)
+    try:
+        private_key = os.getenv('SIGNER_PRIVATE_KEY')
+        if not private_key:
+            raise ValueError(
+                "SIGNER_PRIVATE_KEY not found in environment variables")
+
+        return generate_signature(private_key, user_op_hash)
+    except ValueError as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
 
 if __name__ == "__main__":
-    signature = generate_evm_smart_wallet_signature()
-    print(f"Signature: {signature}")
-
+    result = generate_evm_smart_wallet_signature()
+    if isinstance(result, dict) and result.get("status") == "error":
+        print(f"Error: {result.get('error')}")
+    else:
+        print(f"Signature: {result}")

@@ -11,12 +11,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 def fetch_transaction():
     api_key = os.getenv('CROSSMINT_SERVER_API_KEY')
     user_op_sender = "TODO:user_op_sender_address_here"
     transaction_id = "TODO:transaction_id_here"
-    
+
     return get_transaction(api_key, user_op_sender, transaction_id)
+
 
 if __name__ == "__main__":
     response = fetch_transaction()
@@ -25,5 +27,5 @@ if __name__ == "__main__":
         print(f"\nTransaction Fetched Successfully!")
     else:
         print(f"\nTransaction Fetching Failed!")
-        
+
     print(f"Result: {json.dumps(response, indent=2)}")

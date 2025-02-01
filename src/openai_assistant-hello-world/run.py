@@ -13,7 +13,7 @@ sys.path.append(project_root)
 
 from library.wallet_utils import (
     create_wallet, create_transaction, generate_signature, 
-    submit_transaction_signature, get_transaction, 
+    submit_transaction_approval, get_transaction, 
     transfer_usdc, get_usdc_from_faucet, get_wallet_balance
 )
 from library.tools_schema import tools_schema
@@ -113,8 +113,8 @@ class CryptoAssistantAgent:
             
             # Step 3: Submit signature
             print("Submitting signature...")
-            signer_id = f"evm-keypair-{self.signer_address}"
-            submit_response = submit_transaction_signature(
+            signer_id = self.signer_address
+            submit_response = submit_transaction_approval(
                 self.api_key, 
                 wallet_address, 
                 transaction_id, 
@@ -145,7 +145,7 @@ class CryptoAssistantAgent:
 
     def get_usdc_tokens(self, wallet_address: str, amount: int):
         """Get USDC tokens from faucet for a wallet"""
-        result = get_usdc_from_faucet("base-sepolia", wallet_address, amount)
+        result = get_usdc_from_faucet(self.api_key, "base-sepolia", wallet_address, amount)
         
         if result.get("status") == "success":
             print(f"Waiting for faucet transaction to process...")
@@ -169,65 +169,32 @@ class CryptoAssistantAgent:
                 from_wallet,
                 to_wallet,
                 amount_in_base_units,
-                "base-sepolia"
+                "base-sepolia",
+                self.private_key
             )
             
             if transaction_response.get("status") != "success":
                 return transaction_response
 
             transaction_data = transaction_response.get("transaction_data", {})
-            transaction_id = transaction_data.get("id")
-            user_op_hash = transaction_data.get("data", {}).get("userOperationHash")
-
-            if not user_op_hash:
-                return {
-                    "status": "error",
-                    "message": "No user operation hash found in transaction data"
-                }
-
-            # Generate and submit signature
-            signature = generate_signature(self.private_key, user_op_hash)
-            signer_id = f"evm-keypair-{self.signer_address}"
             
-            submit_response = submit_transaction_signature(
-                self.api_key,
-                from_wallet,
-                transaction_id,
-                signer_id,
-                signature
-            )
-
-            if submit_response.get("status") != "success":
-                return submit_response
-
             # Wait for transaction to process
             print("Waiting for transaction to process...")
             time.sleep(15)  # Increased wait time
-
-            # Get final transaction status and verify it
-            transaction_status = get_transaction(self.api_key, from_wallet, transaction_id)
             
-            if (transaction_status.get("status") == "success" and 
-                transaction_status.get("transaction_data", {}).get("status") == "confirmed"):
-                from_explorer = self.get_explorer_url(from_wallet)
-                to_explorer = self.get_explorer_url(to_wallet)
-                
-                return {
-                    "status": "success",
-                    "message": "USDC transfer completed",
-                    "data": {
-                        "transaction_id": transaction_id,
-                        "final_status": transaction_status,
-                        "from_wallet_explorer": from_explorer,
-                        "to_wallet_explorer": to_explorer
-                    }
+            # Get the explorer URLs
+            from_explorer = self.get_explorer_url(from_wallet)
+            to_explorer = self.get_explorer_url(to_wallet)
+            
+            return {
+                "status": "success",
+                "message": "USDC transfer completed",
+                "data": {
+                    "transaction_data": transaction_data,
+                    "from_wallet_explorer": from_explorer,
+                    "to_wallet_explorer": to_explorer
                 }
-            else:
-                return {
-                    "status": "error",
-                    "message": "Transaction not confirmed on chain",
-                    "data": transaction_status
-                }
+            }
             
         except Exception as e:
             return {
