@@ -1,13 +1,6 @@
 import time
 import json
 from openai import OpenAI
-from dotenv import load_dotenv
-from library.tools_schema import tools_schema
-from library.wallet_utils import (
-    create_wallet,
-    create_transaction, generate_signature, submit_transaction_approval,
-    get_transaction, transfer_usdc, get_usdc_from_faucet
-)
 import os
 import sys
 from pathlib import Path
@@ -16,6 +9,14 @@ from pathlib import Path
 project_root = str(Path(__file__).parent.parent)
 sys.path.append(project_root)
 
+from library.tools_schema import tools_schema
+from library.wallet_utils import (
+    create_wallet,
+    create_transaction, generate_signature, submit_transaction_approval,
+    get_transaction, transfer_usdc, get_usdc_from_faucet
+)
+
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -36,6 +37,10 @@ class CryptoAIAgent:
             raise ValueError(
                 "No signer address found in .env file, be sure to run 'python generate_keys.py' inside '/src/library' to generate a new set of keys")
 
+        self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not self.openai_api_key:
+            raise ValueError("No OpenAI API key found in .env file")
+
         self.evm_treasury_wallet = os.getenv('TEST_TREASURY_EVM_WALLET')
 
         self.chain_explorers = {
@@ -44,7 +49,7 @@ class CryptoAIAgent:
             "solana-devnet": "https://explorer.solana.com/?cluster=devnet"
         }
         self.chat_history = []
-        self.openai_client = OpenAI()  # Assumes OPENAI_API_KEY in env
+        self.openai_client = OpenAI()
         self.wallets = []
         self.api_calls = 0
         self.max_api_calls = 20
