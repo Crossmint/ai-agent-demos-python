@@ -96,7 +96,7 @@ def get_usdc_from_faucet(api_key: str, chain: str, wallet_address: str, amount: 
     payload = {
         "amount": amount,
         "chain": chain,
-        "currency": "usdxm"
+        "token": "usdxm"
     }
 
     try:
@@ -493,8 +493,8 @@ def get_wallet_balance(api_key: str, chain: str, wallet_address: str):
     """
 
     # Hit the Crossmint Staging API
-    endpoint = f"https://staging.crossmint.com/api/unstable/wallets/{
-        chain}:{wallet_address}/tokens"
+    endpoint = f"https://staging.crossmint.com/api/v1-alpha2/wallets/{
+        wallet_address}/balances?chains={chain}&tokens=usdxm"
 
     headers = {
         "x-api-key": api_key,
@@ -514,11 +514,12 @@ def get_wallet_balance(api_key: str, chain: str, wallet_address: str):
         response_json = response.json()
         # Find USDC token balance from response array
         usdc_token = next((token for token in response_json if token.get(
-            "tokenMetadata", {}).get("symbol") == "USDC"), None)
-        balance = "0x0"
+            "token", None) == "usdxm"), None)
+        balance = "0"
         if usdc_token:
-            balance = usdc_token.get("tokenBalance", "0x0")
-        human_readable_balance = int(balance, 16) / 10**6
+            balances = usdc_token.get("balances", {})
+            balance = balances.get(chain, "0")
+        human_readable_balance = int(balance) / 10**6
 
         return {
             "status": "success",
